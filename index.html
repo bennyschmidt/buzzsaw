@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buzzsaw</title>
+    <link href="./css/styles.css" rel="stylesheet">
+    <link href="./font/lucide/lucide.css" rel="stylesheet">
+    <link href="https://googleapis.com" rel="stylesheet">
+  </head>
+  <body>
+    <main class="main-content">
+      <header class="config-bar">
+        <input id="file-upload" type="file" accept=".html,text/html" hidden>
+        <input type="file" id="folder-picker" webkitdirectory directory multiple hidden>
+        <button class="config-button" type="button" title="Back" aria-label="Back" onclick="console.log('clicked back')">
+          <i class="icon icon-arrow-left"></i>
+        </button>
+        <button class="config-button" type="button" title="Forward" aria-label="Forward" onclick="console.log('clicked forward')">
+          <i class="icon icon-arrow-right"></i>
+        </button>
+        <button class="config-button" type="button" title="Forward" aria-label="Forward" onclick="console.log('clicked search')">
+          <i class="icon icon-search"></i>
+        </button>
+        <input id="current-file-input" type="text" value="file:///~/project/agent.html" readonly aria-label="Current file">
+        <button class="config-button" type="button" title="New file" aria-label="New file" onclick="document.getElementById('file-upload').click()">
+          <i class="icon icon-file-plus"></i>
+        </button>
+        <label for="modelSelect">MODEL:</label>
+        <select class="config-bar-select" id="modelSelect">
+          <!-- Dynamic -->
+        </select>
+        <button class="config-button" type="button" title="Configure model" aria-label="Configure model" onclick="document.getElementById('configModal').classList.add('active')">
+          <i class="icon icon-settings"></i>
+        </button>
+        <label for="embeddingSelect">EMBEDDING MODEL:</label>
+        <select class="config-bar-select" id="embeddingSelect">
+          <!-- Dynamic -->
+        </select>
+        <button class="config-button" type="button" title="Select bucket" aria-label="Select bucket" onclick="document.getElementById('folder-picker').click()">
+          <i class="icon icon-folder-sync"></i>
+        </button>
+      </header>
+      <section class="agent">
+        <div class="workflow">
+          <div class="workflow-header">
+            <div class="workflow-title">Tasks</div>
+            <div class="workflow-tabs">
+              <div class="tab active">agent.html</div>
+            </div>
+          </div>
+          <ul class="tasklist" id="main-tasklist">
+            <!-- Dynamic -->
+          </ul>
+          <div class="toolchain" id="main-toolchain">
+            <!-- Dynamic -->
+          </div>
+        </div>
+        <aside class="sidebar" aria-label="Workflow details" style="display: none;">
+          <section class="panel">
+            <div class="panel-title">Tasklists</div>
+            <div class="panel-tabs" role="tablist" aria-label="Tasklists" id="tasklist-tabs-container">
+              <!-- Dynamic -->
+            </div>
+            <ol class="timeline" id="sidebar-timeline">
+              <!-- Dynamic -->
+            </ol>
+          </section>
+          <section class="panel">
+            <div class="panel-title">Toolchains</div>
+            <div class="panel-tabs" role="tablist" aria-label="Toolchains" id="toolchain-tabs-container">
+              <!-- Dynamic -->
+            </div>
+            <div id="sidebar-toolchain-items">
+              <!-- Dynamic -->
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <div class="modal" id="configModal" role="dialog" aria-modal="true" aria-labelledby="configTitle">
+      <div class="modal-content">
+        <div class="modal-header" id="configTitle">Configuration: Model (<span id="modal-model-name">DEFAULT_MODEL</span>)</div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="modelBaseUrl">MODEL_BASE_URL</label>
+            <input id="modelBaseUrl" type="text" value="http://localhost:11434">
+          </div>
+          <div class="form-group">
+            <label>Modelfile Parameters</label>
+          </div>
+          <div class="form-group">
+            <label for="temperature">Temperature</label>
+            <input id="temperature" type="range" min="0" max="1" step="0.1" value="0.7">
+            <span style="float: right; font-size: 0.75rem; color: hsl(var(--muted-foreground));">0.7</span>
+          </div>
+          <div class="form-group">
+            <label for="topK">Top_K</label>
+            <input id="topK" type="number" value="40">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="save-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">Save Changes</button>
+          <button class="cancel-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      document.getElementById('configModal').addEventListener('click', function(event) {
+        if (event.target === this) {
+          this.classList.remove('active');
+        }
+      });
+
+      async function fetchAgentFile() {
+        try {
+          const response = await fetch('./js/buzzword/agent.html');
+          if (!response.ok) throw new Error('Network error matching agent.html path');
+          const text = await response.value || await response.text();
+
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(text, 'text/html');
+
+          updateUI(doc);
+        } catch (error) {
+          console.error('Error fetching or processing workflow file:', error);
+        }
+      }
+
+      function updateUI(doc) {
+        // 1. Title Meta
+        const namespace = doc.querySelector('namespace')?.textContent || 'Workflow';
+        const tasklistName = doc.querySelector('tasklist')?.getAttribute('name') || namespace;
+        document.title = `${tasklistName} - Workflow`;
+
+        // 2. Select Elements
+        const modelName = doc.querySelector('model')?.getAttribute('name') || 'Default Model';
+        const modelSelect = document.getElementById('modelSelect');
+        modelSelect.innerHTML = `<option selected>${modelName}</option>`;
+        document.getElementById('modal-model-name').textContent = modelName;
+
+        const bucketModel = doc.querySelector('bucket')?.getAttribute('model') || 'Default Embedding';
+        const embeddingSelect = document.getElementById('embeddingSelect');
+        embeddingSelect.innerHTML = `<option selected>${bucketModel}</option>`;
+
+        // 3. Main Tasks View & Sidebar Timeline
+        const tasks = Array.from(doc.querySelectorAll('tasklist task'));
+        const mainTasklist = document.getElementById('main-tasklist');
+        const sidebarTimeline = document.getElementById('sidebar-timeline');
+
+        mainTasklist.innerHTML = '';
+        sidebarTimeline.innerHTML = '';
+
+        tasks.forEach(task => {
+          const name = task.getAttribute('name') || '';
+          const isCompleted = task.hasAttribute('completed');
+          const isActive = task.hasAttribute('active');
+
+          // Main layout task entry
+          const liMain = document.createElement('li');
+          liMain.className = isCompleted ? 'completed' : 'uncompleted';
+          liMain.textContent = name;
+          mainTasklist.appendChild(liMain);
+
+          // Sidebar step node
+          const liTimeline = document.createElement('li');
+          let timelineClass = '';
+          if (isCompleted) timelineClass = 'timeline-item completed';
+          else if (isActive) timelineClass = 'timeline-item active';
+          else timelineClass = 'timeline-item';
+
+          liTimeline.className = timelineClass;
+          if (isActive) liTimeline.setAttribute('aria-current', 'step');
+
+          liTimeline.innerHTML = `
+            <span class="timeline-node" aria-hidden="true"></span>
+            <span>${name}</span>
+          `;
+          sidebarTimeline.appendChild(liTimeline);
+        });
+
+        // 4. Panel Header Tab Panels
+        const tasklistTabs = document.getElementById('tasklist-tabs-container');
+        tasklistTabs.innerHTML = `
+          <div class="panel-tab active panel-tab-label" role="tab" aria-selected="true">${tasklistName}</div>
+          <div class="panel-tab" aria-label="Add tasklist">
+            <button class="add-button" type="button" title="Add tasklist" aria-label="Add tasklist">+</button>
+          </div>
+        `;
+
+        const toolchainElem = doc.querySelector('toolchain');
+        const toolchainName = toolchainElem ? toolchainElem.getAttribute('name') : 'Toolchain';
+        const toolchainTabs = document.getElementById('toolchain-tabs-container');
+        toolchainTabs.innerHTML = `
+          <div class="panel-tab active panel-tab-label" role="tab" aria-selected="true">${toolchainName}</div>
+          <div class="panel-tab" aria-label="Add toolchain">
+            <button class="add-button" type="button" title="Add toolchain" aria-label="Add toolchain">+</button>
+          </div>
+        `;
+
+        // 5. Toolchains Processing (Main body area and sidebar items)
+        const tools = Array.from(doc.querySelectorAll('toolchain tool'));
+        const mainToolchain = document.getElementById('main-toolchain');
+        const sidebarToolchainItems = document.getElementById('sidebar-toolchain-items');
+
+        mainToolchain.innerHTML = `<div class="toolchain-header">Toolchain</div>`;
+        sidebarToolchainItems.innerHTML = '';
+
+        // Derive current active task contextual hints if present
+        const activeTask = doc.querySelector('task[active]');
+        const activeTaskContent = activeTask ? activeTask.textContent.trim() : '';
+
+        tools.forEach((tool, index) => {
+          const tName = tool.getAttribute('name') || '';
+
+          // Match standard framework behavior where first step runs initially during target lifecycle
+          const isToolActive = index === 0;
+
+          const toolDiv = document.createElement('div');
+          toolDiv.className = isToolActive ? 'toolchain-item active' : 'toolchain-item';
+
+          if (isToolActive) {
+            let contextSummary = `Processing...`;
+
+            if (activeTaskContent) {
+              contextSummary = activeTaskContent;
+            }
+
+            toolDiv.innerHTML = `
+              <div class="prompt-status">
+                <span class="spinner" aria-hidden="true"></span>
+                <strong>Tool: ${tName}</strong>
+              </div>
+              <div class="prompt-status">
+                <span>${contextSummary}</span>
+              </div>
+            `;
+          } else {
+            toolDiv.innerHTML = `<strong>Tool: ${tName}</strong>`;
+          }
+          mainToolchain.appendChild(toolDiv);
+
+          // Sidebar structural node
+          const sideItem = document.createElement('div');
+          sideItem.className = 'panel-item';
+          sideItem.innerHTML = `<span class="item-dot"></span><span>${tName}</span>`;
+          sidebarToolchainItems.appendChild(sideItem);
+        });
+      }
+
+      // Initial execution
+      fetchAgentFile();
+
+      // Poll file modification states every 1000 milliseconds
+      setInterval(fetchAgentFile, 1000);
+    </script>
+  </body>
+</html>

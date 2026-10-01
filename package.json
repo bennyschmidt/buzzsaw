@@ -1,0 +1,10 @@
+{
+  "name": "buzzsaw",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "electron . & cd ./js/buzzword && node index & cd ../.."
+  },
+  "devDependencies": {
+    "electron": "^44.5.1"
+  }
+}
