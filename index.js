@@ -46,8 +46,8 @@ const server = http.createServer((req, res) => {
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 640,
+    width: 1280,
+    height: 748,
     frame: false,
     webPreferences: {
       nodeIntegration: false,

@@ -6,7 +6,6 @@
     <title>Buzzsaw</title>
     <link href="./css/styles.css" rel="stylesheet">
     <link href="./font/lucide/lucide.css" rel="stylesheet">
-    <link href="https://googleapis.com" rel="stylesheet">
   </head>
   <body>
     <main class="main-content">
@@ -22,21 +21,17 @@
         <button class="config-button" type="button" title="Forward" aria-label="Forward" onclick="console.log('clicked search')">
           <i class="icon icon-search"></i>
         </button>
-        <input id="current-file-input" type="text" value="file:///~/project/agent.html" readonly aria-label="Current file">
+        <input id="current-file-input" type="text" value="file://js/buzzword/agent.glyph" readonly aria-label="Current file">
         <button class="config-button" type="button" title="New file" aria-label="New file" onclick="document.getElementById('file-upload').click()">
           <i class="icon icon-file-plus"></i>
         </button>
         <label for="modelSelect">MODEL:</label>
-        <select class="config-bar-select" id="modelSelect">
-          <!-- Dynamic -->
-        </select>
+        <select class="config-bar-select" id="modelSelect"></select>
         <button class="config-button" type="button" title="Configure model" aria-label="Configure model" onclick="document.getElementById('configModal').classList.add('active')">
           <i class="icon icon-settings"></i>
         </button>
         <label for="embeddingSelect">EMBEDDING MODEL:</label>
-        <select class="config-bar-select" id="embeddingSelect">
-          <!-- Dynamic -->
-        </select>
+        <select class="config-bar-select" id="embeddingSelect"></select>
         <button class="config-button" type="button" title="Select bucket" aria-label="Select bucket" onclick="document.getElementById('folder-picker').click()">
           <i class="icon icon-folder-sync"></i>
         </button>
@@ -44,38 +39,14 @@
       <section class="agent">
         <div class="workflow">
           <div class="workflow-header">
-            <div class="workflow-title">Tasks</div>
+            <div class="workflow-title" id="workflow-title-display">Tasks</div>
             <div class="workflow-tabs">
-              <div class="tab active">agent.html</div>
+              <div class="tab active">agent.glyph</div>
             </div>
           </div>
-          <ul class="tasklist" id="main-tasklist">
-            <!-- Dynamic -->
-          </ul>
-          <div class="toolchain" id="main-toolchain">
-            <!-- Dynamic -->
-          </div>
+          <ul class="tasklist" id="main-tasklist"></ul>
+          <div class="toolchain" id="main-toolchain"></div>
         </div>
-        <aside class="sidebar" aria-label="Workflow details" style="display: none;">
-          <section class="panel">
-            <div class="panel-title">Tasklists</div>
-            <div class="panel-tabs" role="tablist" aria-label="Tasklists" id="tasklist-tabs-container">
-              <!-- Dynamic -->
-            </div>
-            <ol class="timeline" id="sidebar-timeline">
-              <!-- Dynamic -->
-            </ol>
-          </section>
-          <section class="panel">
-            <div class="panel-title">Toolchains</div>
-            <div class="panel-tabs" role="tablist" aria-label="Toolchains" id="toolchain-tabs-container">
-              <!-- Dynamic -->
-            </div>
-            <div id="sidebar-toolchain-items">
-              <!-- Dynamic -->
-            </div>
-          </section>
-        </aside>
       </section>
     </main>
     <div class="modal" id="configModal" role="dialog" aria-modal="true" aria-labelledby="configTitle">
@@ -100,159 +71,146 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="save-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">Save Changes</button>
-          <button class="cancel-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">Cancel</button>
+          <button class="save-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">
+            Save
+          </button>
+          <button class="cancel-button" type="button" onclick="document.getElementById('configModal').classList.remove('active')">
+            Cancel
+          </button>
         </div>
       </div>
     </div>
     <script>
-      document.getElementById('configModal').addEventListener('click', function(event) {
-        if (event.target === this) {
-          this.classList.remove('active');
-        }
-      });
-
-      async function fetchAgentFile() {
+      async function loadAgentFile () {
         try {
-          const response = await fetch('./js/buzzword/agent.html');
-          if (!response.ok) throw new Error('Network error matching agent.html path');
-          const text = await response.value || await response.text();
+          const response = await fetch('./js/buzzword/agent.glyph');
 
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(text, 'text/html');
+          if (!response.ok) {
+            throw new Error('File fetch response error.');
+          }
 
-          updateUI(doc);
+          const text = await response.text();
+
+          const parsedData = parseAgentFile(text);
+
+          render(parsedData);
         } catch (error) {
-          console.error('Error fetching or processing workflow file:', error);
+          console.error('Error fetching or updating data from agent.glyph:', error);
         }
       }
 
-      function updateUI(doc) {
-        // 1. Title Meta
-        const namespace = doc.querySelector('namespace')?.textContent || 'Workflow';
-        const tasklistName = doc.querySelector('tasklist')?.getAttribute('name') || namespace;
-        document.title = `${tasklistName} - Workflow`;
+      function parseAgentFile (text) {
+        const cleanText = text.replace(/\/\/.*\$/gm, '');
 
-        // 2. Select Elements
-        const modelName = doc.querySelector('model')?.getAttribute('name') || 'Default Model';
-        const modelSelect = document.getElementById('modelSelect');
-        modelSelect.innerHTML = `<option selected>${modelName}</option>`;
-        document.getElementById('modal-model-name').textContent = modelName;
+        const data = {
+          model: '',
+          embedModel: '',
+          tasklistTitle: 'Tasks',
+          tools: [],
+          tasks: []
+        };
 
-        const bucketModel = doc.querySelector('bucket')?.getAttribute('model') || 'Default Embedding';
-        const embeddingSelect = document.getElementById('embeddingSelect');
-        embeddingSelect.innerHTML = `<option selected>${bucketModel}</option>`;
+        const modelMatch = cleanText.match(/\[model\]\s*:\s*"([^"]+)"/);
+        const embedMatch = cleanText.match(/\[embedModel\]\s*:\s*"([^"]+)"/);
+        const titleMatch = cleanText.match(/tasklist\s+"([^"]+)"/);
 
-        // 3. Main Tasks View & Sidebar Timeline
-        const tasks = Array.from(doc.querySelectorAll('tasklist task'));
-        const mainTasklist = document.getElementById('main-tasklist');
-        const sidebarTimeline = document.getElementById('sidebar-timeline');
+        if (modelMatch) {
+          data.model = modelMatch[1];
+        }
 
-        mainTasklist.innerHTML = '';
-        sidebarTimeline.innerHTML = '';
+        if (embedMatch) {
+          data.embedModel = embedMatch[1];
+        }
 
-        tasks.forEach(task => {
-          const name = task.getAttribute('name') || '';
-          const isCompleted = task.hasAttribute('completed');
-          const isActive = task.hasAttribute('active');
+        if (titleMatch) {
+          data.tasklistTitle = titleMatch[1];
+        }
 
-          // Main layout task entry
-          const liMain = document.createElement('li');
-          liMain.className = isCompleted ? 'completed' : 'uncompleted';
-          liMain.textContent = name;
-          mainTasklist.appendChild(liMain);
+        const toolchainBlock = cleanText.match(/toolchain[\s\S]*?\{([\s\S]*?)\}/);
 
-          // Sidebar step node
-          const liTimeline = document.createElement('li');
-          let timelineClass = '';
-          if (isCompleted) timelineClass = 'timeline-item completed';
-          else if (isActive) timelineClass = 'timeline-item active';
-          else timelineClass = 'timeline-item';
+        if (toolchainBlock) {
+          const toolRegex = /<([a-zA-Z0-9_-]+)\s*\/>/g;
 
-          liTimeline.className = timelineClass;
-          if (isActive) liTimeline.setAttribute('aria-current', 'step');
+          let match;
 
-          liTimeline.innerHTML = `
-            <span class="timeline-node" aria-hidden="true"></span>
-            <span>${name}</span>
-          `;
-          sidebarTimeline.appendChild(liTimeline);
-        });
+          while ((match = toolRegex.exec(toolchainBlock[1])) !== null) {
+            data.tools.push(match[1]);
+          }
+        }
 
-        // 4. Panel Header Tab Panels
-        const tasklistTabs = document.getElementById('tasklist-tabs-container');
-        tasklistTabs.innerHTML = `
-          <div class="panel-tab active panel-tab-label" role="tab" aria-selected="true">${tasklistName}</div>
-          <div class="panel-tab" aria-label="Add tasklist">
-            <button class="add-button" type="button" title="Add tasklist" aria-label="Add tasklist">+</button>
-          </div>
-        `;
+        const tasklistBlock = cleanText.match(/tasklist[\s\S]*?\{([\s\S]*?)\}/);
 
-        const toolchainElem = doc.querySelector('toolchain');
-        const toolchainName = toolchainElem ? toolchainElem.getAttribute('name') : 'Toolchain';
-        const toolchainTabs = document.getElementById('toolchain-tabs-container');
-        toolchainTabs.innerHTML = `
-          <div class="panel-tab active panel-tab-label" role="tab" aria-selected="true">${toolchainName}</div>
-          <div class="panel-tab" aria-label="Add toolchain">
-            <button class="add-button" type="button" title="Add toolchain" aria-label="Add toolchain">+</button>
-          </div>
-        `;
+        if (tasklistBlock) {
+          const taskRegex = /<task\s*(completed|active)?\s*"\s*([^"]+)"\s*(?:\/|>\s*([\s\S]*?)\s*<\/task)>/g;
 
-        // 5. Toolchains Processing (Main body area and sidebar items)
-        const tools = Array.from(doc.querySelectorAll('toolchain tool'));
-        const mainToolchain = document.getElementById('main-toolchain');
-        const sidebarToolchainItems = document.getElementById('sidebar-toolchain-items');
+          let match;
 
-        mainToolchain.innerHTML = `<div class="toolchain-header">Toolchain</div>`;
-        sidebarToolchainItems.innerHTML = '';
+          while ((match = taskRegex.exec(tasklistBlock[1])) !== null) {
+            let status = match[1] || 'pending';
+            let name = match[2];
+            let subtext = '';
 
-        // Derive current active task contextual hints if present
-        const activeTask = doc.querySelector('task[active]');
-        const activeTaskContent = activeTask ? activeTask.textContent.trim() : '';
-
-        tools.forEach((tool, index) => {
-          const tName = tool.getAttribute('name') || '';
-
-          // Match standard framework behavior where first step runs initially during target lifecycle
-          const isToolActive = index === 0;
-
-          const toolDiv = document.createElement('div');
-          toolDiv.className = isToolActive ? 'toolchain-item active' : 'toolchain-item';
-
-          if (isToolActive) {
-            let contextSummary = `Processing...`;
-
-            if (activeTaskContent) {
-              contextSummary = activeTaskContent;
+            if (match[3]) {
+              subtext = match[3].replace(/"/g, '').trim();
             }
 
-            toolDiv.innerHTML = `
-              <div class="prompt-status">
-                <span class="spinner" aria-hidden="true"></span>
-                <strong>Tool: ${tName}</strong>
-              </div>
-              <div class="prompt-status">
-                <span>${contextSummary}</span>
-              </div>
-            `;
-          } else {
-            toolDiv.innerHTML = `<strong>Tool: ${tName}</strong>`;
+            data.tasks.push({ name, status, subtext });
           }
-          mainToolchain.appendChild(toolDiv);
+        }
 
-          // Sidebar structural node
-          const sideItem = document.createElement('div');
-          sideItem.className = 'panel-item';
-          sideItem.innerHTML = `<span class="item-dot"></span><span>${tName}</span>`;
-          sidebarToolchainItems.appendChild(sideItem);
-        });
+        return data;
       }
 
-      // Initial execution
-      fetchAgentFile();
+      function render (data) {
+        console.log(data)
+        if (data.model) {
+          document.getElementById('modelSelect').innerHTML = `<option value="${data.model}">${data.model}</option>`;
+          document.getElementById('modal-model-name').textContent = data.model;
+        }
 
-      // Poll file modification states every 1000 milliseconds
-      setInterval(fetchAgentFile, 1000);
+        if (data.embedModel) {
+          document.getElementById('embeddingSelect').innerHTML = `<option value="${data.embedModel}">${data.embedModel}</option>`;
+        }
+
+        if (data.tasklistTitle) {
+          document.getElementById('workflow-title-display').textContent = data.tasklistTitle;
+        }
+
+        const tasklistUl = document.getElementById('main-tasklist');
+
+        tasklistUl.innerHTML = data.tasks.map(task => {
+          let innerContent = `<span>${task.name}</span>`;
+
+          if (task.status === 'active') {
+            innerContent = `<span><strong>${task.name}</strong><em class="prompt-status">In progress...</em></span>`;
+          }
+
+          if (task.subtext) {
+            innerContent += `<div class="tool-details">${task.subtext}</div>`;
+          }
+
+          return `<li class="${task.status}">${innerContent}</li>`;
+        }).join('');
+
+        const toolchainDiv = document.getElementById('main-toolchain');
+
+        if (data.tools.length > 0) {
+          let toolchainHtml = `<div class="toolchain-header">Toolchain</div>`;
+
+          toolchainHtml += data.tools.map((tool, idx) => {
+            const isActive = idx === 0 ? 'active' : '';
+
+            return `<div class="toolchain-item ${isActive}">${tool}<p>${!isActive ? '' : '<em class="prompt-status"><span class="spinner"></span><span>Working...</span></em>'}</p></div>`;
+          }).join('');
+
+          toolchainDiv.innerHTML = toolchainHtml;
+        } else {
+          toolchainDiv.innerHTML = '';
+        }
+      }
+
+      loadAgentFile();
+      setInterval(loadAgentFile, 1000);
     </script>
   </body>
 </html>

@@ -201,7 +201,7 @@ video,
   text-decoration: none;
 }
 
-.tasklist li.uncompleted::before {
+.tasklist li.pending::before {
   content: "○";
   color: hsl(var(--muted-foreground));
 }
